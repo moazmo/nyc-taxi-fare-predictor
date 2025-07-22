@@ -58,27 +58,28 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     """Response model for taxi fare prediction."""
     
-    predicted_fare: float = Field(..., description="Predicted fare amount in USD")
-    confidence_score: float = Field(..., description="Prediction confidence (0-1)")
-    fare_range: dict = Field(..., description="Estimated fare range")
-    trip_distance: float = Field(..., description="Calculated trip distance in miles")
-    prediction_details: dict = Field(..., description="Additional prediction details")
+    fare: float = Field(..., description="Predicted fare amount in USD")
+    confidence: float = Field(..., description="Prediction confidence (0-1)")
+    distance_miles: float = Field(..., description="Trip distance in miles")
+    duration_minutes: float = Field(..., description="Estimated trip duration in minutes")
+    pickup_borough: str = Field(..., description="Pickup borough")
+    dropoff_borough: str = Field(..., description="Dropoff borough")
+    features: dict = Field(..., description="Model features used for prediction")
+    model_version: str = Field(..., description="Model version used")
+    prediction_timestamp: str = Field(..., description="Prediction timestamp")
     
     class Config:
         json_schema_extra = {
             "example": {
-                "predicted_fare": 15.75,
-                "confidence_score": 0.85,
-                "fare_range": {
-                    "min": 12.50,
-                    "max": 19.00
-                },
-                "trip_distance": 3.2,
-                "prediction_details": {
-                    "model_used": "ensemble",
-                    "features_used": 17,
-                    "prediction_time": "2025-01-01T12:00:00Z"
-                }
+                "fare": 15.75,
+                "confidence": 0.85,
+                "distance_miles": 3.2,
+                "duration_minutes": 16.0,
+                "pickup_borough": "Manhattan",
+                "dropoff_borough": "Brooklyn",
+                "features": {},
+                "model_version": "Enhanced Ensemble v1.0",
+                "prediction_timestamp": "2025-01-01T12:00:00Z"
             }
         }
 

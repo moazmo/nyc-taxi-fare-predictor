@@ -4,10 +4,11 @@ Machine learning prediction logic for taxi fare estimation.
 
 import os
 import sys
-import pickle
+import joblib
 import json
 import logging
 import time
+from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import pandas as pd
 import numpy as np
@@ -18,6 +19,8 @@ MODELS_DIR = Path(__file__).parent.parent / "models"
 sys.path.append(str(MODELS_DIR))
 
 from .utils import (
+    calculate_haversine_distance,
+    calculate_manhattan_distance,
     calculate_trip_features,
     calculate_fare_confidence,
     format_prediction_details,
@@ -46,30 +49,23 @@ class TaxiFarePredictor:
         try:
             # Load model
             model_path = MODELS_DIR / "best_taxi_fare_model.pkl"
-            with open(model_path, 'rb') as f:
-                self.model = pickle.load(f)
+            self.model = joblib.load(model_path)
             logger.info(f"Model loaded successfully from {model_path}")
             
             # Load scaler
             scaler_path = MODELS_DIR / "robust_scaler.pkl"
-            with open(scaler_path, 'rb') as f:
-                self.scaler = pickle.load(f)
+            self.scaler = joblib.load(scaler_path)
             logger.info(f"Scaler loaded successfully from {scaler_path}")
             
             # Load model configuration
             config_path = MODELS_DIR / "model_config.json"
             with open(config_path, 'r') as f:
-                self.model_config = json.load(f)
+                self.config = json.load(f)
             logger.info(f"Model config loaded successfully from {config_path}")
             
-            # Set feature names (from the enhanced model)
-            self.feature_names = [
-                'pickup_longitude', 'pickup_latitude', 'dropoff_longitude',
-                'dropoff_latitude', 'passenger_count', 'trip_distance',
-                'trip_duration_estimated', 'haversine_distance', 'manhattan_distance',
-                'bearing', 'pickup_hour', 'pickup_day_of_week', 'pickup_month',
-                'is_weekend', 'distance_to_center', 'pickup_borough', 'dropoff_borough'
-            ]
+            # Set feature names from the model config
+            self.feature_names = self.config.get('web_app_features', [])
+            logger.info(f"Loaded {len(self.feature_names)} features: {self.feature_names}")
             
             self.is_loaded = True
             logger.info("All model components loaded successfully")
@@ -86,54 +82,100 @@ class TaxiFarePredictor:
         passenger_count: int = 1
     ) -> pd.DataFrame:
         """
-        Prepare features for prediction based on the enhanced model structure.
-        
-        Args:
-            pickup_lon: Pickup longitude
-            pickup_lat: Pickup latitude
-            dropoff_lon: Dropoff longitude
-            dropoff_lat: Dropoff latitude
-            passenger_count: Number of passengers
-        
-        Returns:
-            DataFrame with prepared features
+        Prepare features for prediction matching the exact training feature set.
+        Expected features from model_config.json:
+        - pickup_longitude, pickup_latitude, dropoff_longitude, dropoff_latitude, passenger_count
+        - hour, day, month, weekday, year
+        - distance, jfk_pickup_dist, ewr_pickup_dist, lga_pickup_dist
+        - is_weekend, is_rush_hour, is_night
+        - manhattan_pickup_dist, is_manhattan_pickup, is_manhattan_dropoff
+        - log_distance
         """
-        # Calculate basic trip features
-        trip_features = calculate_trip_features(
-            pickup_lat, pickup_lon, dropoff_lat, dropoff_lon, passenger_count
-        )
+        from datetime import datetime
         
-        # Create feature dictionary
+        # Get current time for temporal features (use defaults for consistent prediction)
+        now = datetime.now()
+        hour = now.hour
+        day = now.day
+        month = now.month
+        weekday = now.weekday()  # 0=Monday, 6=Sunday
+        year = now.year
+        
+        # Calculate distances - ensure float64 type consistency
+        distance = float(calculate_haversine_distance(pickup_lat, pickup_lon, dropoff_lat, dropoff_lon))
+        
+        # Airport coordinates
+        jfk_lat, jfk_lon = 40.6413, -73.7781
+        ewr_lat, ewr_lon = 40.6895, -74.1745
+        lga_lat, lga_lon = 40.7769, -73.8740
+        
+        jfk_pickup_dist = float(calculate_haversine_distance(pickup_lat, pickup_lon, jfk_lat, jfk_lon))
+        ewr_pickup_dist = float(calculate_haversine_distance(pickup_lat, pickup_lon, ewr_lat, ewr_lon))
+        lga_pickup_dist = float(calculate_haversine_distance(pickup_lat, pickup_lon, lga_lat, lga_lon))
+        
+        # Manhattan center for distance calculation
+        manhattan_center_lat, manhattan_center_lon = 40.7589, -73.9851
+        manhattan_pickup_dist = float(calculate_haversine_distance(pickup_lat, pickup_lon, manhattan_center_lat, manhattan_center_lon))
+        
+        # Boolean features - convert to int for consistency
+        is_weekend = int(weekday >= 5)  # Saturday=5, Sunday=6
+        is_rush_hour = int((7 <= hour <= 9) or (17 <= hour <= 19))
+        is_night = int(hour >= 22 or hour <= 5)
+        
+        # Manhattan bounds (approximate)
+        manhattan_lat_min, manhattan_lat_max = 40.7000, 40.8000
+        manhattan_lon_min, manhattan_lon_max = -74.0200, -73.9300
+        
+        is_manhattan_pickup = int(manhattan_lat_min <= pickup_lat <= manhattan_lat_max and 
+                                 manhattan_lon_min <= pickup_lon <= manhattan_lon_max)
+        is_manhattan_dropoff = int(manhattan_lat_min <= dropoff_lat <= manhattan_lat_max and 
+                                  manhattan_lon_min <= dropoff_lon <= manhattan_lon_max)
+        
+        # Log distance (add small epsilon to avoid log(0))
+        log_distance = float(np.log(max(distance, 0.01)))
+        
+        # Create feature dictionary in the exact order expected by the model
+        # Ensure all values are proper Python types (not numpy types)
         features = {
-            'pickup_longitude': pickup_lon,
-            'pickup_latitude': pickup_lat,
-            'dropoff_longitude': dropoff_lon,
-            'dropoff_latitude': dropoff_lat,
-            'passenger_count': passenger_count,
-            'trip_distance': trip_features['haversine_distance'],
-            'trip_duration_estimated': trip_features['haversine_distance'] * 4.5,  # Estimated minutes
-            'haversine_distance': trip_features['haversine_distance'],
-            'manhattan_distance': trip_features['manhattan_distance'],
-            'bearing': trip_features['bearing'],
-            'pickup_hour': 12,  # Default to noon
-            'pickup_day_of_week': 2,  # Default to Tuesday
-            'pickup_month': 6,  # Default to June
-            'is_weekend': 0,  # Default to weekday
-            'distance_to_center': self._calculate_distance_to_center(pickup_lat, pickup_lon),
-            'pickup_borough': self._get_borough_id(pickup_lat, pickup_lon),
-            'dropoff_borough': self._get_borough_id(dropoff_lat, dropoff_lon)
+            'pickup_longitude': float(pickup_lon),
+            'pickup_latitude': float(pickup_lat),
+            'dropoff_longitude': float(dropoff_lon),
+            'dropoff_latitude': float(dropoff_lat),
+            'passenger_count': int(passenger_count),
+            'hour': int(hour),
+            'day': int(day),
+            'month': int(month),
+            'weekday': int(weekday),
+            'year': int(year),
+            'distance': distance,
+            'jfk_pickup_dist': jfk_pickup_dist,
+            'ewr_pickup_dist': ewr_pickup_dist,
+            'lga_pickup_dist': lga_pickup_dist,
+            'is_weekend': is_weekend,
+            'is_rush_hour': is_rush_hour,
+            'is_night': is_night,
+            'manhattan_pickup_dist': manhattan_pickup_dist,
+            'is_manhattan_pickup': is_manhattan_pickup,
+            'is_manhattan_dropoff': is_manhattan_dropoff,
+            'log_distance': log_distance
         }
         
-        # Create DataFrame with correct feature order
-        df = pd.DataFrame([features])
+        # Create DataFrame with features in the exact order from model config
+        expected_features = self.config.get('web_app_features', [])
+        if expected_features:
+            # Create DataFrame with only the expected features in the right order
+            ordered_features = {feat: features[feat] for feat in expected_features if feat in features}
+            df = pd.DataFrame([ordered_features])
+        else:
+            df = pd.DataFrame([features])
         
-        # Ensure all required features are present
-        for feature in self.feature_names:
-            if feature not in df.columns:
-                df[feature] = 0  # Default value for missing features
+        # Ensure consistent data types - convert all to float64 for sklearn compatibility
+        df = df.astype('float64')
         
-        # Reorder columns to match training data
-        df = df[self.feature_names]
+        logger.debug(f"Prepared features: {list(df.columns)}")
+        logger.debug(f"Feature values: {df.iloc[0].to_dict()}")
+        logger.debug(f"DataFrame shape: {df.shape}")
+        logger.debug(f"DataFrame dtypes: {df.dtypes.to_dict()}")
         
         return df
     
@@ -161,6 +203,23 @@ class TaxiFarePredictor:
             return 3  # Bronx
         else:
             return 4  # Staten Island or other
+    
+    def _get_borough_name(self, lat: float, lon: float) -> str:
+        """
+        Get borough name based on coordinates.
+        
+        Returns:
+            Borough name as string
+        """
+        borough_id = self._get_borough_id(lat, lon)
+        borough_names = {
+            0: "Manhattan",
+            1: "Brooklyn", 
+            2: "Queens",
+            3: "Bronx",
+            4: "Staten Island"
+        }
+        return borough_names.get(borough_id, "Other")
     
     def predict_fare(
         self,
@@ -192,26 +251,49 @@ class TaxiFarePredictor:
                 pickup_lon, pickup_lat, dropoff_lon, dropoff_lat, passenger_count
             )
             
-            # Scale features
+            logger.debug(f"Features DataFrame before scaling: {features_df.dtypes}")
+            logger.debug(f"Features shape: {features_df.shape}")
+            
+            # Scale features - ensure consistent data types
             features_scaled = self.scaler.transform(features_df)
+            
+            # Convert to float64 to avoid data type conflicts
+            features_scaled = features_scaled.astype(np.float64)
+            
+            logger.debug(f"Features after scaling shape: {features_scaled.shape}")
+            logger.debug(f"Features after scaling dtype: {features_scaled.dtype}")
             
             # Make prediction
             prediction = self.model.predict(features_scaled)[0]
+            prediction = float(prediction)  # Ensure it's a standard Python float
             
-            # Calculate trip distance for response
+            logger.info(f"Raw prediction: {prediction}")
+            
+            # Calculate additional trip information for response
             from .utils import calculate_haversine_distance
             trip_distance = calculate_haversine_distance(
                 pickup_lat, pickup_lon, dropoff_lat, dropoff_lon
             )
             
+            # Estimate duration based on distance and NYC traffic (approximate)
+            # Average NYC taxi speed: 12-15 mph
+            estimated_duration = (trip_distance / 12.0) * 60  # Convert to minutes
+            
+            # Get borough information (simplified)
+            pickup_borough = self._get_borough_name(pickup_lat, pickup_lon)
+            dropoff_borough = self._get_borough_name(dropoff_lat, dropoff_lon)
+            
             # Get individual model predictions if it's an ensemble
             individual_predictions = []
             if hasattr(self.model, 'estimators_'):
                 # For ensemble models like Random Forest
-                individual_predictions = [
-                    estimator.predict(features_scaled)[0] 
-                    for estimator in self.model.estimators_[:5]  # First 5 estimators
-                ]
+                try:
+                    individual_predictions = [
+                        float(estimator.predict(features_scaled)[0]) 
+                        for estimator in self.model.estimators_[:5]  # First 5 estimators
+                    ]
+                except:
+                    individual_predictions = [prediction] * 3
             elif hasattr(self.model, 'predict'):
                 # Single model - use multiple slightly varied predictions for confidence
                 individual_predictions = [prediction] * 3
@@ -221,25 +303,26 @@ class TaxiFarePredictor:
                 prediction, individual_predictions, trip_distance
             )
             
-            # Format prediction details
-            processing_time = time.time() - start_time
-            details = format_prediction_details(
-                model_type="ensemble" if hasattr(self.model, 'estimators_') else "single",
-                features_count=len(self.feature_names),
-                trip_distance=trip_distance,
-                processing_time=processing_time
-            )
+            final_fare = max(2.50, prediction)  # Minimum fare
             
+            # Return format expected by frontend
             return {
-                "predicted_fare": round(max(2.50, prediction), 2),  # Minimum fare
-                "confidence_score": confidence,
-                "fare_range": fare_range,
-                "trip_distance": round(trip_distance, 3),
-                "prediction_details": details
+                "fare": round(final_fare, 2),
+                "confidence": confidence,
+                "distance_miles": round(trip_distance, 3),
+                "duration_minutes": round(estimated_duration, 1),
+                "pickup_borough": pickup_borough,
+                "dropoff_borough": dropoff_borough,
+                "features": dict(zip(self.feature_names, features_scaled[0].tolist())),
+                "model_version": "Enhanced Ensemble v1.0",
+                "prediction_timestamp": datetime.now().isoformat()
             }
             
         except Exception as e:
             logger.error(f"Error during prediction: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise RuntimeError(f"Prediction failed: {str(e)}")
     
     def get_model_info(self) -> Dict:
