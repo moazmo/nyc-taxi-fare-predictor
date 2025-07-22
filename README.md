@@ -1,27 +1,46 @@
 # 🚖 NYC Taxi Fare Predictor
 
-A modern web application that predicts NYC taxi fares using machine learning. Built with FastAPI backend and React frontend for local development.
+A modern web application that predicts taxi fares in New York City using machine learning. Built with FastAPI backend and React frontend, featuring an interactive map interface and enhanced ensemble ML models.
 
-## 🏗️ Architecture
+![NYC Taxi Fare Predictor](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
+![Python](https://img.shields.io/badge/Python-3.11+-blue)
+![React](https://img.shields.io/badge/React-18+-61DAFB)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688)
 
-### Backend (FastAPI + Python)
-- **RESTful API** with FastAPI framework
-- **Enhanced ML Model** - Uses the best performing model from Task_4_3_2
-- **Input Validation** - NYC coordinate bounds and business logic validation
-- **Confidence Scoring** - Prediction reliability assessment
-- **CORS Support** - Configured for local frontend integration
+## ✨ Features
 
-### Frontend (React + TypeScript + Vite)
-- **Interactive Map** - Visual trip planning with pickup/dropoff selection
-- **Real-time Prediction** - Instant fare estimates
-- **Confidence Display** - Visual confidence indicators
-- **Responsive Design** - Mobile-friendly interface
-- **Modern UI** - Built with Tailwind CSS
+- **🗺️ Interactive Map**: Click-to-select pickup and dropoff locations in NYC
+- **🤖 ML-Powered Predictions**: Enhanced ensemble model with XGBoost and Random Forest
+- **📊 Detailed Analytics**: Distance, duration, confidence scores, and borough information  
+- **🎯 Real-time Validation**: NYC bounds checking and coordinate validation
+- **💻 Modern UI**: Responsive React interface with TypeScript
+- **🚀 Fast API**: High-performance backend with automatic documentation
+
+## 🛠️ Tech Stack
+
+### Backend
+- **FastAPI** - Modern Python web framework
+- **XGBoost** - Gradient boosting ML framework
+- **scikit-learn** - Machine learning library
+- **Pandas & NumPy** - Data processing
+- **Pydantic** - Data validation
+
+### Frontend  
+- **React 18** - UI framework
+- **TypeScript** - Type-safe JavaScript
+- **Leaflet** - Interactive maps
+- **Vite** - Fast build tool
+- **React Hot Toast** - Notifications
+
+### ML Model
+- **Ensemble Learning** - XGBoost + Random Forest + Gradient Boosting
+- **Feature Engineering** - 21 optimized features including distance, time, and location data
+- **Robust Scaling** - Preprocessing for consistent predictions
 
 ## 📁 Project Structure
 ```
-Task_4_5/
-├── README.md                    # This file
+nyc-taxi-fare-predictor/
+├── README.md                    # Project documentation
 ├── backend/                     # FastAPI backend
 │   ├── app/                     # Application package
 │   │   ├── __init__.py
@@ -43,6 +62,7 @@ Task_4_5/
 │   ├── package.json            # Node.js dependencies
 │   ├── vite.config.ts          # Vite configuration
 │   └── tailwind.config.js      # Tailwind CSS config
+├── run.py                       # Development server launcher
 └── .gitignore                  # Git ignore file
 ```
 

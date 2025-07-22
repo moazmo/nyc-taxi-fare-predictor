@@ -2,6 +2,9 @@
   "name": "nyc-taxi-fare-frontend",
   "private": true,
   "version": "1.0.0",
+  "description": "Frontend for NYC Taxi Fare Predictor - Interactive React app with map interface",
+  "author": "Moaz Mohamed <moazmo@github>",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
