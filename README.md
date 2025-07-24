@@ -7,6 +7,12 @@ A modern web application that predicts taxi fares in New York City using machine
 ![React](https://img.shields.io/badge/React-18+-61DAFB)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688)
 
+## 📸 Application Preview
+
+![NYC Taxi Fare Predictor Interface](images/screenshots/nyc-taxi-fare-predictor-interface.png)
+
+*Interactive map interface showing pickup/dropoff selection and real-time fare prediction*
+
 ## ✨ Features
 
 - **🗺️ Interactive Map**: Click-to-select pickup and dropoff locations in NYC
@@ -62,7 +68,12 @@ nyc-taxi-fare-predictor/
 │   ├── package.json            # Node.js dependencies
 │   ├── vite.config.ts          # Vite configuration
 │   └── tailwind.config.js      # Tailwind CSS config
+├── images/                      # Visual assets and documentation
+│   ├── screenshots/            # Application screenshots
+│   ├── ui/                     # UI assets and logos
+│   └── README.md               # Images documentation
 ├── run.py                       # Development server launcher
+├── start-frontend.bat          # Frontend startup script
 └── .gitignore                  # Git ignore file
 ```
 
